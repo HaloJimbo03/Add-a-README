@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nebula Bonus Wheel Multiplier</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 20px; min-height: 100vh; overflow: hidden; }
+  .app { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  h1 { font-size: 18px; font-weight: 600; color: #1a1a1a; text-align: center; }
+  .pointer { width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 24px solid #1a1a1a; margin-bottom: -5px; }
+  canvas { border-radius: 50%; border: 1px solid #ddd; background: #fff; }
+  #spin { width: 100%; padding: 10px; font-size: 15px; font-weight: 600; cursor: pointer; border-radius: 8px; border: 1px solid #ccc; background: #fff; color: #1a1a1a; transition: background 0.15s; }
+  #spin:hover { background: #f0f0f0; }
+  #spin:disabled { opacity: 0.4; cursor: not-allowed; }
+  .result { min-height: 40px; text-align: center; font-size: 28px; font-weight: 700; color: #1a1a1a; }
+  #mlg-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  #mlg-overlay.active { display: block; }
+  #mlg-bg {
+    position: absolute;
+    inset: 0;
+    animation: flashbg 0.15s infinite;
+  }
+  @keyframes flashbg {
+    0%   { background: rgba(255,0,0,0.25); }
+    16%  { background: rgba(255,165,0,0.25); }
+    33%  { background: rgba(255,255,0,0.25); }
+    50%  { background: rgba(0,255,0,0.25); }
+    66%  { background: rgba(0,0,255,0.25); }
+    83%  { background: rgba(128,0,128,0.25); }
+    100% { background: rgba(255,0,0,0.25); }
+  }
+  .mlg-glasses {
+    position: absolute;
+    font-size: 80px;
+    animation: dropGlasses 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    left: 50%;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 0 10px #000);
+  }
+  @keyframes dropGlasses {
+    0%   { top: -120px; }
+    100% { top: 30%; }
+  }
+  .mlg-text {
+    position: absolute;
+    font-size: 52px;
+    font-weight: 900;
+    font-style: italic;
+    color: #fff;
+    text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+    animation: mlgText 0.4s ease-out forwards;
+    white-space: nowrap;
+  }
+  .mlg-text.t1 { top: 15%; left: 10%; animation-delay: 0.1s; opacity: 0; }
+  .mlg-text.t2 { bottom: 20%; right: 8%; animation-delay: 0.2s; opacity: 0; font-size: 38px; color: #ff0; }
+  .mlg-text.t3 { top: 55%; left: 15%; animation-delay: 0.15s; opacity: 0; font-size: 44px; color: #0ff; }
+  @keyframes mlgText {
+    0%   { opacity: 0; transform: scale(0.3) rotate(-15deg); }
+    60%  { opacity: 1; transform: scale(1.2) rotate(5deg); }
+    100% { opacity: 1; transform: scale(1) rotate(-3deg); }
+  }
+  .crosshair {
+    position: absolute;
+    font-size: 64px;
+    animation: spinCross 1s linear infinite;
+    filter: drop-shadow(0 0 8px lime);
+  }
+  .crosshair.c1 { top: 5%; right: 10%; color: lime; }
+  .crosshair.c2 { bottom: 10%; left: 5%; color: #f0f; animation-direction: reverse; font-size: 48px; }
+  @keyframes spinCross {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .dollar {
+    position: absolute;
+    font-size: 36px;
+    animation: flyDollar 1.2s ease-in forwards;
+    filter: drop-shadow(0 0 6px gold);
+  }
+  @keyframes flyDollar {
+    0%   { opacity: 1; transform: translateY(0) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(-300px) rotate(720deg); }
+  }
+  #mlg-winner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 96px;
+    font-weight: 900;
+    font-style: italic;
+    color: #FFD700;
+    text-shadow: 6px 6px 0 #000, -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 0 0 40px #ff6600;
+    animation: winnerPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    white-space: nowrap;
+  }
+  @keyframes winnerPop {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+    70%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+    100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Nebula Bonus Wheel Multiplier</h1>
+  <div class="pointer"></div>
+  <canvas id="wheel" width="320" height="320"></canvas>
+  <button id="spin" onclick="startSpin()">Spin</button>
+  <div class="result" id="result"></div>
+</div>
+
+<div id="mlg-overlay">
+  <div id="mlg-bg"></div>
+  <div class="mlg-glasses">😎</div>
+  <div class="mlg-text t1">MLG</div>
+  <div class="mlg-text t2">360 NO SCOPE</div>
+  <div class="mlg-text t3">GET REKT</div>
+  <div class="crosshair c1">✛</div>
+  <div class="crosshair c2">✛</div>
+  <div id="mlg-winner"></div>
+</div>
+
+<audio id="mlg-audio" src="mom-get-the-camera-loudtronix.m4a" preload="auto"></audio>
+
+<script>
+const ENTRIES = ['x2.5', 'x2', 'x1.5', 'x1', 'x0.8', 'x0.5'];
+const COLORS = ['#534AB7', '#0F6E56', '#185FA5', '#854F0B', '#993C1D', '#993556'];
+const BIG_WINS = ['x2.5', 'x2'];
+const NUM = ENTRIES.length;
+const SLICE = (Math.PI * 2) / NUM;
+let rotation = -Math.PI / 2 - SLICE / 2;
+let spinning = false;
+
+function drawWheel(highlightIndex) {
+  const canvas = document.getElementById('wheel');
+  const ctx = canvas.getContext('2d');
+  const cx = 160, cy = 160, r = 156;
+  ctx.clearRect(0, 0, 320, 320);
+  for (let i = 0; i < NUM; i++) {
+    const start = rotation + i * SLICE;
+    const end = start + SLICE;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, end);
+    ctx.closePath();
+    ctx.fillStyle = highlightIndex === i ? '#FFD700' : COLORS[i];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const midAngle = start + SLICE / 2;
+    const labelR = r * 0.65;
+    const lx = cx + Math.cos(midAngle) * labelR;
+    const ly = cy + Math.sin(midAngle) * labelR;
+    ctx.save();
+    ctx.translate(lx, ly);
+    let textAngle = midAngle;
+    if (textAngle > Math.PI / 2 && textAngle < Math.PI * 1.5) textAngle += Math.PI;
+    ctx.rotate(textAngle);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px -apple-system, sans-serif';
+    ctx.fillText(ENTRIES[i], 0, 0);
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(cx, cy, 16, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1; ctx.stroke();
+}
+
+function playSound() {
+  const audio = document.getElementById('mlg-audio');
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+function spawnDollars() {
+  const overlay = document.getElementById('mlg-overlay');
+  for (let i = 0; i < 12; i++) {
+    setTimeout(() => {
+      const d = document.createElement('div');
+      d.className = 'dollar';
+      d.textContent = '💰';
+      d.style.left = (10 + Math.random() * 80) + '%';
+      d.style.top = (40 + Math.random() * 40) + '%';
+      d.style.animationDelay = (Math.random() * 0.4) + 's';
+      overlay.appendChild(d);
+      setTimeout(() => d.remove(), 1600);
+    }, i * 80);
+  }
+}
+
+function triggerMLG(winner) {
+  const overlay = document.getElementById('mlg-overlay');
+  document.getElementById('mlg-winner').textContent = winner;
+  overlay.classList.add('active');
+  playSound();
+  spawnDollars();
+  setTimeout(() => {
+    overlay.classList.remove('active');
+  }, 4000);
+}
+
+function startSpin() {
+  if (spinning) return;
+  spinning = true;
+  document.getElementById('spin').disabled = true;
+  document.getElementById('result').textContent = '';
+  const winner = Math.floor(Math.random() * NUM);
+  const targetRotation = -Math.PI / 2 - (winner * SLICE + SLICE / 2);
+  const extraSpins = (5 + Math.floor(Math.random() * 3)) * Math.PI * 2;
+  const totalDelta = extraSpins + ((targetRotation - rotation) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+  const duration = 3500 + Math.random() * 1000;
+  const startTime = performance.now();
+  const startRotation = rotation;
+  function ease(t) { return 1 - Math.pow(1 - t, 4); }
+  function frame(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    rotation = startRotation + totalDelta * ease(t);
+    drawWheel();
+    if (t < 1) { requestAnimationFrame(frame); return; }
+    rotation = startRotation + totalDelta;
+    drawWheel(winner);
+    const winLabel = ENTRIES[winner];
+    document.getElementById('result').textContent = winLabel;
+    spinning = false;
+    document.getElementById('spin').disabled = false;
+    if (BIG_WINS.includes(winLabel)) {
+      setTimeout(() => triggerMLG(winLabel), 300);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+drawWheel();
+</script>
+</body>
+</html>
